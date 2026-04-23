@@ -1,11 +1,23 @@
 const express = require("express")
 const nodemailer = require("nodemailer")
 const cors = require("cors")
-
+const rateLimit = require("express-rate-limit");
 
 const app = express()
 app.use(express.json())
 app.use(cors())
+
+
+
+const emailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 5,
+  message: {
+    message: "Too many requests, please try again after 15 minutes",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const transport = nodemailer.createTransport({
     host: 'smtp.gmail.com',
@@ -39,8 +51,12 @@ async function verifyCaptcha(token) {
   return data.success;
 }
 
-app.post("/send/email", async (req, res) => {
+app.post("/send/email", emailLimiter , async (req, res) => {
   try {
+      if (req.body.website) {
+          return res.status(400).json({ message: "Bot detected" });
+      }
+      
     const { name, to , mes, captchaToken } = req.body;
 
     // ✅ 1. captcha check
@@ -57,6 +73,13 @@ app.post("/send/email", async (req, res) => {
     if (!name || !to || !mes) {
       return res.status(400).json({ message: "All fields required" });
     }
+      
+    if (!to.includes("@")) {
+        return res.status(400).json({ message: "Invalid email" });
+    }
+      if (mes.length > 200) {
+          return res.status(400).json({ message: "Message too long" });
+      }
 
     // ✅ 3. fixed receiver (IMPORTANT)
     const htmlTemplate = `
