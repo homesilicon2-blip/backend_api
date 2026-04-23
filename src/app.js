@@ -50,8 +50,8 @@ app.post("/send/email", async (req, res) => {
     `;
 
     await transport.sendMail({
-      from: `"Portfolio Contact" <homesilicon2@gmail.com>`,
-      to: to,
+      from: `"Portfolio Contact" <process.env.EMAILSIL>`,
+      to: process.env.EMAIL,
       subject: "📨 New Contact Message, from portfolio",
       html: htmlTemplate,
     });
