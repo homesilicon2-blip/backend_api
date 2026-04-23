@@ -16,49 +16,69 @@ const transport = nodemailer.createTransport({
         pass:process.env.PASS,
     }
 })
+
+// ✅ CAPTCHA verify (fetch version)
+async function verifyCaptcha(token) {
+  const params = new URLSearchParams({
+    secret: process.env.RECAPTCHA_SECRET,
+    response: token,
+  });
+
+  const res = await fetch(
+    "https://www.google.com/recaptcha/api/siteverify",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params,
+    }
+  );
+
+  const data = await res.json();
+  return data.success;
+}
+
 app.post("/send/email", async (req, res) => {
-  const { name, to, mes } = req.body;
-
   try {
+    const { name, to , mes, captchaToken } = req.body;
+
+    // ✅ 1. captcha check
+    if (!captchaToken) {
+      return res.status(400).json({ message: "Captcha missing" });
+    }
+
+    const valid = await verifyCaptcha(captchaToken);
+    if (!valid) {
+      return res.status(403).json({ message: "Captcha failed" });
+    }
+
+    // ✅ 2. validation
+    if (!name || !to || !mes) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    // ✅ 3. fixed receiver (IMPORTANT)
     const htmlTemplate = `
-      <div style="font-family: Arial, sans-serif; background:#0f172a; padding:20px;">
-        <div style="max-width:600px; margin:auto; background:#111827; border-radius:12px; padding:30px; border:1px solid #3b82f6;">
-          
-          <h2 style="color:#3b82f6; text-align:center; margin-bottom:20px;">
-            📩 New Message Received
-          </h2>
-
-          <div style="color:#e5e7eb; font-size:14px; line-height:1.6;">
-            <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Email:</strong> ${to}</p>
-            
-            <div style="margin-top:20px; padding:15px; background:#1f2937; border-radius:8px;">
-              <p style="margin:0; color:#d1d5db;">
-                ${mes}
-              </p>
-            </div>
-          </div>
-
-          <div style="margin-top:30px; text-align:center;">
-            <p style="font-size:12px; color:#6b7280;">
-              Sent from your portfolio website 🚀
-            </p>
-          </div>
-
+      <div style="font-family: Arial; background:#0f172a; padding:20px;">
+        <div style="max-width:600px; margin:auto; background:#111827; padding:30px;">
+          <h2 style="color:#3b82f6;">📩 New Message</h2>
+          <p><strong>Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${to}</p>
+          <p>${mes}</p>
         </div>
       </div>
     `;
 
     await transport.sendMail({
-      from: `"Portfolio Contact" <process.env.EMAILSIL>`,
-      to: process.env.EMAIL,
-      subject: "📨 New Contact Message, from portfolio",
+      from: `"Portfolio Contact" <${process.env.EMAILSIL}>`,
+      to: process.env.EMAIL, // 👈 FIXED
+      replyTo: to, // 👈 user ko reply kar paoge
+      subject: `Contact from ${name}`,
       html: htmlTemplate,
     });
 
-    res.status(200).json({
-      message: "Email sent successfully",
-    });
+    res.json({ message: "Email sent successfully" });
 
   } catch (err) {
     res.status(500).json({
@@ -67,6 +87,7 @@ app.post("/send/email", async (req, res) => {
     });
   }
 });
-
-
 module.exports = app
+
+
+
